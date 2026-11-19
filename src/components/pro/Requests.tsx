@@ -237,8 +237,8 @@ function RequestDetail({
           </span>
           <Row k="Longueur" v={labelOf(LENGTHS, length)} note={r.corrections?.length ? `corrigée (IA : ${labelOf(LENGTHS, r.analysis.length).toLowerCase()})` : `${Math.round(r.analysis.length_confidence * 100)} %`} />
           <Row k="Volume" v={labelOf(VOLUMES, volume)} note={r.corrections?.volume ? `corrigé (IA : ${labelOf(VOLUMES, r.analysis.volume).toLowerCase()})` : `${Math.round(r.analysis.volume_confidence * 100)} %`} />
-          <Row k="Repousses" v={labelOf(REGROWTH, r.analysis.regrowth)} note={`${Math.round(r.analysis.regrowth_confidence * 100)} %`} />
-          <Row k="Pointes" v={labelOf(ENDS, r.analysis.ends)} note={`${Math.round(r.analysis.ends_confidence * 100)} %`} />
+          <Row k="Repousses" v={labelOf(REGROWTH, r.corrections?.regrowth ?? r.analysis.regrowth)} note={r.corrections?.regrowth ? `corrigées (IA : ${labelOf(REGROWTH, r.analysis.regrowth).toLowerCase()})` : `${Math.round(r.analysis.regrowth_confidence * 100)} %`} />
+          <Row k="Pointes" v={labelOf(ENDS, r.corrections?.ends ?? r.analysis.ends)} note={r.corrections?.ends ? `corrigées (IA : ${labelOf(ENDS, r.analysis.ends).toLowerCase()})` : `${Math.round(r.analysis.ends_confidence * 100)} %`} />
           {r.analysis.mock && <p className="pt-2 text-xs text-muted">Analyse simulée (mode démo, pas de clé IA).</p>}
         </div>
         <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-1">

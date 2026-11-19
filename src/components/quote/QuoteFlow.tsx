@@ -49,11 +49,34 @@ type QuoteResponse = {
   demo?: boolean;
 };
 
-const SHOTS: { kind: PhotoKind; label: string; title: string; hint: string }[] = [
-  { kind: "back", label: "Dos", title: "Tourne-toi, cheveux détachés", hint: "De dos · cheveux secs et détachés" },
-  { kind: "profile", label: "Profil", title: "Maintenant, de profil", hint: "De profil · bras le long du corps" },
-  { kind: "roots", label: "Racines", title: "Un gros plan des racines", hint: "Gros plan · lumière du jour" },
+const SHOTS: { kind: PhotoKind; label: string; title: string; hint: string; tip: string }[] = [
+  {
+    kind: "back",
+    label: "Dos",
+    title: "Tourne-toi, cheveux détachés",
+    hint: "De dos · de la tête aux hanches",
+    tip: "Idéalement, fais-toi aider. Cheveux secs, tous dans le dos : tes épaules et ta taille doivent être visibles.",
+  },
+  {
+    kind: "profile",
+    label: "Profil",
+    title: "Maintenant, de profil",
+    hint: "De profil · de la tête aux hanches",
+    tip: "Cheveux détachés dans le dos, bras le long du corps, face à la lumière.",
+  },
+  {
+    kind: "roots",
+    label: "Racines",
+    title: "Un gros plan des racines",
+    hint: "Gros plan · lumière du jour",
+    tip: "Le haut de la tête avec la raie visible, à la lumière du jour, sans flash.",
+  },
 ];
+
+/** En dessous de ce seuil de confiance, la cliente confirme elle-même le critère. */
+const SURE = 0.75;
+
+type Criterion = "length" | "volume" | "regrowth" | "ends";
 
 const SCAN_STEPS = ["Repérage de la silhouette", "Mesure de la longueur", "Estimation du volume", "Repousses et pointes"];
 
@@ -82,8 +105,6 @@ const NATURE_PATHS: Record<NatureKey, string> = {
   4: "M20 4l6 4l-12 4l12 4l-12 4l12 4l-12 4l6 4",
 };
 
-const pct = (n: number) => `Fiabilité ${Math.round(n * 100)} %`;
-
 export function QuoteFlow({ salon }: { salon: PublicSalon }) {
   const [step, setStep] = useState<Step>("home");
   const [treatment, setTreatment] = useState<string | null>(null);
@@ -97,7 +118,8 @@ export function QuoteFlow({ salon }: { salon: PublicSalon }) {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<HairAnalysis | null>(null);
   const [corrections, setCorrections] = useState<Corrections>({});
-  const [editing, setEditing] = useState<"length" | "volume" | null>(null);
+  const [confirmed, setConfirmed] = useState<Partial<Record<Criterion, boolean>>>({});
+  const [editing, setEditing] = useState<Criterion | null>(null);
 
   const [nature, setNature] = useState<NatureKey | null>(null);
   const [subtype, setSubtype] = useState<NatureSubtype | "?">(null);
@@ -128,6 +150,26 @@ export function QuoteFlow({ salon }: { salon: PublicSalon }) {
   const allShots = SHOTS.every((s) => photos[s.kind]);
   const length = corrections.length ?? analysis?.length ?? "mid_back";
   const volume = corrections.volume ?? analysis?.volume ?? "medium";
+  const regrowth = corrections.regrowth ?? analysis?.regrowth ?? "none";
+  const ends = corrections.ends ?? analysis?.ends ?? "healthy";
+  const confidenceOf = (c: Criterion) => (analysis ? analysis[`${c}_confidence`] : 1);
+  const toConfirm = (["length", "volume", "regrowth", "ends"] as const).filter(
+    (c) => confidenceOf(c) < SURE && !confirmed[c],
+  ).length;
+
+  /** La cliente choisit une valeur : elle est confirmée, et notée comme correction si elle diffère de l'IA. */
+  function pick<C extends Criterion>(c: C, v: NonNullable<Corrections[C]>) {
+    setCorrections((prev) => ({ ...prev, [c]: analysis && v === analysis[c] ? undefined : v }));
+    setConfirmed((prev) => ({ ...prev, [c]: true }));
+    setEditing(null);
+  }
+  const rowProps = (c: Criterion) => ({
+    sure: confidenceOf(c) >= SURE,
+    confirmed: Boolean(confirmed[c]),
+    corrected: Boolean(corrections[c]),
+    editing: editing === c,
+    onToggleEdit: () => setEditing(editing === c ? null : c),
+  });
   const precise = nature !== null && coloring !== null && previous !== null && henna !== null;
   const contactOk =
     contact.firstName.trim() !== "" &&
@@ -159,6 +201,8 @@ export function QuoteFlow({ salon }: { salon: PublicSalon }) {
     setAnalysisError(null);
     setScanStep(0);
     setCorrections({});
+    setConfirmed({});
+    setEditing(null);
 
     let tick = 0;
     const timer = setInterval(() => {
@@ -347,8 +391,8 @@ export function QuoteFlow({ salon }: { salon: PublicSalon }) {
           <section className="flex flex-1 flex-col gap-4 px-6 pb-7 pt-2">
             <div className="flex flex-col gap-1">
               <h2 className="font-serif text-[30px] leading-tight">{currentShot.title}</h2>
-              <p className="text-sm text-body">
-                Photo {shotIndex + 1} sur 3 · suis le contour, l&apos;IA s&apos;occupe du reste.
+              <p className="text-sm leading-snug text-body">
+                <strong className="font-bold">Photo {shotIndex + 1} sur 3.</strong> {currentShot.tip}
               </p>
             </div>
 
@@ -501,45 +545,49 @@ export function QuoteFlow({ salon }: { salon: PublicSalon }) {
               <>
                 <div className="flex flex-col gap-1">
                   <h2 className="font-serif text-[30px] leading-tight">Ton analyse est prête</h2>
-                  <p className="text-sm text-body">Si quelque chose ne colle pas, touche « Modifier ».</p>
+                  <p className="text-sm text-body">
+                    {toConfirm > 0
+                      ? `Pour être précise, l'IA a besoin que tu confirmes ${toConfirm} point${toConfirm > 1 ? "s" : ""}.`
+                      : "Si quelque chose ne colle pas, touche « Modifier »."}
+                  </p>
                 </div>
-                <div className="flex flex-col rounded-[22px] bg-white px-[18px] py-1.5">
-                  <ResultRow
+                <div className="flex flex-col divide-y divide-hair rounded-[22px] bg-white px-[18px] py-1.5">
+                  <CriterionRow
                     label="Longueur"
-                    value={labelOf(LENGTHS, length)}
-                    confidence={corrections.length ? "Corrigé par toi" : pct(analysis.length_confidence)}
-                    onEdit={() => setEditing(editing === "length" ? null : "length")}
-                    editing={editing === "length"}
-                  >
-                    <Pills
-                      label="Longueur de tes cheveux"
-                      options={LENGTHS}
-                      value={length}
-                      onChange={(v) => {
-                        setCorrections((c) => ({ ...c, length: v === analysis.length ? undefined : v }));
-                        setEditing(null);
-                      }}
-                    />
-                  </ResultRow>
-                  <ResultRow
+                    question="Détachés, jusqu'où arrivent tes cheveux ?"
+                    options={LENGTHS}
+                    aiValue={analysis.length}
+                    value={length}
+                    onPick={(v) => pick("length", v)}
+                    {...rowProps("length")}
+                  />
+                  <CriterionRow
                     label="Volume"
-                    value={labelOf(VOLUMES, volume)}
-                    confidence={corrections.volume ? "Corrigé par toi" : pct(analysis.volume_confidence)}
-                    onEdit={() => setEditing(editing === "volume" ? null : "volume")}
-                    editing={editing === "volume"}
-                  >
-                    <Pills
-                      label="Volume de tes cheveux"
-                      options={VOLUMES}
-                      value={volume}
-                      onChange={(v) => {
-                        setCorrections((c) => ({ ...c, volume: v === analysis.volume ? undefined : v }));
-                        setEditing(null);
-                      }}
-                    />
-                  </ResultRow>
-                  <ResultRow label="Repousses" value={labelOf(REGROWTH, analysis.regrowth)} confidence={pct(analysis.regrowth_confidence)} />
-                  <ResultRow label="Pointes" value={labelOf(ENDS, analysis.ends)} confidence={pct(analysis.ends_confidence)} last />
+                    question="Quel est le volume de ta chevelure ?"
+                    options={VOLUMES}
+                    aiValue={analysis.volume}
+                    value={volume}
+                    onPick={(v) => pick("volume", v)}
+                    {...rowProps("volume")}
+                  />
+                  <CriterionRow
+                    label="Repousses"
+                    question="As-tu des repousses visibles à la racine ?"
+                    options={REGROWTH}
+                    aiValue={analysis.regrowth}
+                    value={regrowth}
+                    onPick={(v) => pick("regrowth", v)}
+                    {...rowProps("regrowth")}
+                  />
+                  <CriterionRow
+                    label="Pointes"
+                    question="Dans quel état sont tes pointes ?"
+                    options={ENDS}
+                    aiValue={analysis.ends}
+                    value={ends}
+                    onPick={(v) => pick("ends", v)}
+                    {...rowProps("ends")}
+                  />
                 </div>
                 <div className="flex items-start gap-3 rounded-[22px] bg-sand px-[18px] py-4">
                   <SparkIcon className="mt-0.5 h-[22px] w-[22px] flex-none" />
@@ -549,7 +597,9 @@ export function QuoteFlow({ salon }: { salon: PublicSalon }) {
                   </p>
                 </div>
                 <div className="mt-auto">
-                  <PrimaryButton onClick={() => setStep("precisions")}>Affiner mon diagnostic</PrimaryButton>
+                  <PrimaryButton disabled={toConfirm > 0} onClick={() => setStep("precisions")}>
+                    Affiner mon diagnostic
+                  </PrimaryButton>
                 </div>
               </>
             )}
@@ -788,43 +838,90 @@ export function QuoteFlow({ salon }: { salon: PublicSalon }) {
   );
 }
 
-function ResultRow({
+function AiBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1 whitespace-nowrap rounded-[10px] bg-gold-soft px-2 py-1 text-xs font-bold text-gold-ink">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Un critère de l'analyse (longueur, volume, repousses, pointes).
+ * IA sûre d'elle : résultat affiché, modifiable. IA hésitante : la cliente confirme elle-même,
+ * la suggestion de l'IA est indiquée mais rien n'est présélectionné. Aucun pourcentage côté cliente.
+ */
+function CriterionRow<K extends string>({
   label,
+  question,
+  options,
+  aiValue,
   value,
-  confidence,
-  onEdit,
+  sure,
+  confirmed,
+  corrected,
   editing,
-  children,
-  last,
+  onToggleEdit,
+  onPick,
 }: {
   label: string;
-  value: string;
-  confidence: string;
-  onEdit?: () => void;
-  editing?: boolean;
-  children?: React.ReactNode;
-  last?: boolean;
+  question: string;
+  options: readonly { key: K; label: string }[];
+  aiValue: K;
+  value: K;
+  sure: boolean;
+  confirmed: boolean;
+  corrected: boolean;
+  editing: boolean;
+  onToggleEdit: () => void;
+  onPick: (v: K) => void;
 }) {
+  if (!sure && !confirmed) {
+    return (
+      <div className="flex flex-col gap-3 py-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold text-muted">{label}</span>
+          <AiBadge>À confirmer</AiBadge>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-base font-bold">{question}</span>
+          <span className="flex items-center gap-1.5 text-[13px] text-muted">
+            <SparkIcon className="h-3.5 w-3.5" />
+            Suggestion de l&apos;IA : {labelOf(options, aiValue).toLowerCase()}
+          </span>
+        </div>
+        <Pills label={question} options={options} value={null} onChange={onPick} />
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex flex-col gap-3 py-3 ${last ? "" : "border-b border-hair"}`}>
+    <div className="flex flex-col gap-3 py-3">
       <div className="flex items-center gap-3">
         <div className="flex flex-1 flex-col gap-0.5">
           <span className="text-xs font-semibold text-muted">{label}</span>
-          <span className="text-[17px] font-bold">{value}</span>
+          <span className="text-[17px] font-bold">{labelOf(options, value)}</span>
         </div>
-        <span className="rounded-[10px] bg-gold-soft px-2 py-1 text-xs font-bold text-gold-ink">{confidence}</span>
-        {onEdit && (
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-expanded={editing}
-            className="h-11 rounded-full border-[1.5px] border-line bg-white px-3 text-[13px] font-bold"
-          >
-            {editing ? "Fermer" : "Modifier"}
-          </button>
+        {corrected ? (
+          <AiBadge>Corrigé par toi</AiBadge>
+        ) : confirmed ? (
+          <AiBadge>Confirmé par toi</AiBadge>
+        ) : (
+          <AiBadge>
+            <SparkIcon className="h-3 w-3" />
+            Analysé par IA
+          </AiBadge>
         )}
+        <button
+          type="button"
+          onClick={onToggleEdit}
+          aria-expanded={editing}
+          className="h-11 rounded-full border-[1.5px] border-line bg-white px-3 text-[13px] font-bold"
+        >
+          {editing ? "Fermer" : "Modifier"}
+        </button>
       </div>
-      {editing && children}
+      {editing && <Pills label={question} options={options} value={value} onChange={onPick} />}
     </div>
   );
 }

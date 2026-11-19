@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { COLORINGS, LENGTHS, PREVIOUS, VOLUMES, type HairAnalysis } from "@/lib/domain";
+import { COLORINGS, ENDS, LENGTHS, PREVIOUS, REGROWTH, VOLUMES, type HairAnalysis } from "@/lib/domain";
 import { HairAnalysisSchema } from "@/lib/analysis";
 import { isDemoMode } from "@/lib/demo";
 import { computeQuote } from "@/lib/pricing";
@@ -18,6 +18,8 @@ const Body = z.object({
     .object({
       length: z.enum(keys(LENGTHS)).optional(),
       volume: z.enum(keys(VOLUMES)).optional(),
+      regrowth: z.enum(keys(REGROWTH)).optional(),
+      ends: z.enum(keys(ENDS)).optional(),
     })
     .default({}),
   answers: z.object({

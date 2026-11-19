@@ -116,7 +116,7 @@ export type ClientAnswers = {
 };
 
 /** Valeurs de l'analyse que la cliente a corrigées sur l'écran de résultats. */
-export type Corrections = Partial<{ length: LengthKey; volume: VolumeKey }>;
+export type Corrections = Partial<{ length: LengthKey; volume: VolumeKey; regrowth: RegrowthKey; ends: EndsKey }>;
 
 export type QuoteRequest = {
   id: string;
