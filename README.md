@@ -35,7 +35,7 @@ npm test                     # tests du moteur de prix
 ### 1. Supabase
 
 1. Crée un projet sur [supabase.com](https://supabase.com) en choisissant une région **européenne** (par exemple Paris, `eu-west-3`) pour le RGPD.
-2. Dans **SQL Editor**, exécute `supabase/migrations/0001_init.sql`, puis `supabase/seed.sql` (salon de démonstration `atelier-soie`, à supprimer quand tu n'en as plus besoin).
+2. Dans **SQL Editor**, exécute `supabase/migrations/0001_init.sql`, puis `supabase/migrations/0002_grants.sql` et `supabase/seed.sql` (salon de démonstration `atelier-soie`, à supprimer quand tu n'en as plus besoin).
 3. Dans **Authentication > URL Configuration**, mets ton domaine dans *Site URL* (par exemple `https://devizia.vercel.app`) et ajoute `https://devizia.vercel.app/pro` dans *Redirect URLs*.
 4. Récupère dans **Project Settings > API** l'URL du projet, la clé `anon` et la clé `service_role`.
 5. Nettoyage RGPD automatique : dans **Database > Extensions**, active `pg_cron`, puis exécute :
@@ -102,6 +102,7 @@ src/
     supabase/                clients serveur et navigateur
 supabase/
   migrations/0001_init.sql   tables, RLS, stockage, purge RGPD
+  migrations/0002_grants.sql droits explicites par rôle
   seed.sql                   salon de démonstration
 ```
 
